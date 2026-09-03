@@ -84,7 +84,7 @@ export default function NewClassPage() {
           <div className="mb-8">
             <button
               onClick={() => router.push("/admin/dashboard")}
-              className="mb-4 text-sm text-gray-500 hover:text-black"
+              className="mb-4 text-sm text-gray-500 hover:text-black cursor-pointer"
             >
               ← Back to Dashboard
             </button>
@@ -184,7 +184,7 @@ export default function NewClassPage() {
                 accept="image/*"
                 onChange={(e) => setPhoto(e.target.files?.[0] || null)}
                 required
-                className="block w-full rounded-lg border border-gray-300 p-3 text-sm"
+                className="cursor-pointer text-black/60 block w-full rounded-lg border border-gray-300 p-3 text-sm"
               />
 
               {photo && (
@@ -197,9 +197,9 @@ export default function NewClassPage() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full rounded-lg text-black/60 bg-black px-5 py-3 font-medium text-white hover:bg-gray-800"
+              className=" cursor-pointer w-full rounded-lg text-black/60 bg-black px-5 py-3 font-medium text-white hover:bg-gray-800"
             >
-              Create Class
+              Create Class with photo
             </button>
           </form>
         </div>

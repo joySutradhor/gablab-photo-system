@@ -292,7 +292,7 @@ export default function AdminClassesPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={() => router.push("/admin/classes/new")}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 active:scale-[0.98]"
+              className=" cursor-pointer inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 active:scale-[0.98]"
             >
               <svg
                 className="h-4 w-4"
@@ -309,7 +309,7 @@ export default function AdminClassesPage() {
 
             <button
               onClick={handleLogout}
-              className="hidden h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:inline-flex"
+              className="hidden cursor-pointer h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:inline-flex"
             >
               Log out
             </button>
@@ -371,7 +371,7 @@ export default function AdminClassesPage() {
               <select
                 value={photoFilter}
                 onChange={(e) => setPhotoFilter(e.target.value)}
-                className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                className=" cursor-pointer h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
               >
                 <option value="all">All photos</option>
                 <option value="with-photo">With photos</option>
@@ -383,7 +383,7 @@ export default function AdminClassesPage() {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                className=" cursor-pointer h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
               >
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
@@ -392,7 +392,7 @@ export default function AdminClassesPage() {
               {(search || photoFilter !== "all" || sort !== "newest") && (
                 <button
                   onClick={clearFilters}
-                  className="h-11 rounded-lg px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  className=" cursor-pointer h-11 rounded-lg px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                 >
                   Clear
                 </button>
