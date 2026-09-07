@@ -147,7 +147,7 @@ export default function GuestPhotosPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f6f2] px-4 py-6 sm:px-6 sm:py-10 ">
-      <div className="mx-auto w-full max-w-6xl pt-[5vh]">
+      <div className="mx-auto w-full max-w-6xl ">
         {/* Main Card */}
         <div className="overflow-hidden rounded-3xl border border-[#e7e3da] bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
           {/* Header */}
