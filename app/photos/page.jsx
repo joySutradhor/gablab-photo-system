@@ -1,7 +1,26 @@
-
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
+import {
+  FiCamera,
+  FiDownload,
+  FiRefreshCw,
+  FiExternalLink,
+  FiInstagram,
+  FiFacebook,
+  FiLinkedin,
+  FiCheck,
+  FiArrowRight,
+} from "react-icons/fi";
+
+const SITE_URL = "https://www.gastronomicartsbarcelona.com/";
+
+const SOCIAL_LINKS = {
+  instagram: "https://www.instagram.com/gablabbcn/",
+  facebook: "https://www.facebook.com/gablabbcn/",
+  linkedin: "https://www.linkedin.com/company/gablabbcn/",
+};
 
 export default function GuestPhotosPage() {
   const [accessCode, setAccessCode] = useState("");
@@ -10,14 +29,13 @@ export default function GuestPhotosPage() {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
 
-  const SITE_URL = "https://www.gastronomicartsbarcelona.com/";
-
-  const handleSubmit = async (e) => {
+  const handleVerify = async (e) => {
     e.preventDefault();
+
     setError("");
 
-    if (accessCode.length !== 6) {
-      setError("Please enter your 6-digit access code.");
+    if (!/^\d{6}$/.test(accessCode)) {
+      setError("Please enter a valid 6-digit access code.");
       return;
     }
 
@@ -37,77 +55,33 @@ export default function GuestPhotosPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "Invalid access code.");
-        return;
+        throw new Error(
+          result.error || "Unable to find your class. Please check your code.",
+        );
       }
 
       setClassData(result.class);
     } catch (error) {
       console.error("Verification error:", error);
-      setError("Something went wrong. Please try again.");
+      setError(error.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTryAnotherCode = () => {
+  const handleTryAnother = () => {
     setClassData(null);
     setAccessCode("");
     setError("");
-    setLoading(false);
-    setDownloading(false);
   };
 
-  const photoUrl = classData?.photo_path
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/class-photos/${classData.photo_path}`
-    : null;
-
-  const handleDownload = async () => {
-    if (!photoUrl || downloading) return;
-
-    try {
-      setDownloading(true);
-
-      const res = await fetch(photoUrl);
-
-      if (!res.ok) {
-        throw new Error("Failed to download photo");
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${classData?.class_name || "class-photo"}.jpg`;
-
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download error:", err);
-      window.open(photoUrl, "_blank");
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  // Format date: 2026-09-03 → September 3, 2026
   const formatDate = (date) => {
-    if (!date) return "";
+    if (!date) return "—";
 
     try {
-      const parsedDate = new Date(date);
-
-      if (Number.isNaN(parsedDate.getTime())) {
-        return date;
-      }
-
-      return parsedDate.toLocaleDateString("en-US", {
+      return new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
+        day: "2-digit",
         month: "long",
-        day: "numeric",
         year: "numeric",
       });
     } catch {
@@ -115,261 +89,403 @@ export default function GuestPhotosPage() {
     }
   };
 
-  // Format time: 18:30 → 6:30 PM
   const formatTime = (time) => {
-    if (!time) return "";
+    if (!time) return "—";
 
     try {
       const [hours, minutes] = time.split(":");
-
       const date = new Date();
+
       date.setHours(Number(hours), Number(minutes), 0, 0);
 
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
+      return date.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
         minute: "2-digit",
-        hour12: true,
       });
     } catch {
       return time;
     }
   };
 
+  const photoUrl = classData?.photo_path
+    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/class-photos/${classData.photo_path}`
+    : null;
+
+  const handleDownload = async () => {
+    if (!photoUrl) return;
+
+    try {
+      setDownloading(true);
+
+      const response = await fetch(photoUrl);
+
+      if (!response.ok) {
+        throw new Error("Unable to download the photo.");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `gab-lab-${classData?.class_name || "class-photo"}.jpg`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download error:", error);
+
+      // Fallback: open image in a new tab
+      window.open(photoUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10 sm:py-16">
-      <div className="mx-auto flex min-h-[70vh] max-w-md items-center justify-center">
-        <div className="w-full rounded-2xl bg-white p-6 shadow-sm sm:p-8">
-          {!classData ? (
-            <>
-              {/* Header */}
-              <div className="text-center">
-                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-2xl">
-                  📷
-                </div>
-
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Your Class Photos
-                </h1>
-
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  Enter the access code provided for your cooking class to view
-                  your group photo.
-                </p>
-              </div>
-
-              {/* Access Code Form */}
-              <form onSubmit={handleSubmit} className="mt-8">
-                <label
-                  htmlFor="accessCode"
-                  className="mb-2 block text-sm font-medium text-gray-700"
-                >
-                  Access Code
-                </label>
-
-                <input
-                  id="accessCode"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={accessCode}
-                  onChange={(e) =>
-                    setAccessCode(e.target.value.replace(/\D/g, ""))
-                  }
-                  placeholder="Enter 6-digit code"
-                  disabled={loading}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-center font-mono text-lg tracking-[0.3em] text-black/60 outline-none transition placeholder:tracking-normal placeholder:text-gray-400 focus:border-black focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:bg-gray-50"
-                />
-
-                {/* Error */}
-                {error && (
-                  <p className="mt-3 text-center text-sm text-red-500">
-                    {error}
-                  </p>
-                )}
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={loading || accessCode.length !== 6}
-                  className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? (
-                    <>
-                      <svg
-                        className="h-4 w-4 animate-spin"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="9"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                        />
-
-                        <path
-                          className="opacity-90"
-                          fill="currentColor"
-                          d="M21 12a9 9 0 00-9-9v3a6 6 0 016 6h3z"
-                        />
-                      </svg>
-
-                      Checking...
-                    </>
-                  ) : (
-                    "View My Photo"
-                  )}
-                </button>
-              </form>
-
-              <p className="mt-6 text-center text-xs leading-5 text-gray-400">
-                Your access code is unique to your class.
-              </p>
-            </>
-          ) : (
-            <>
-              {/* Class Information */}
-              <div className="text-left">
-                <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
-                  {classData.class_name}
-                </h1>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                  {classData.class_date && (
-                    <span>{formatDate(classData.class_date)}</span>
-                  )}
-
-                  {classData.class_date && classData.class_time && (
-                    <span className="text-gray-300">·</span>
-                  )}
-
-                  {classData.class_time && (
-                    <span>{formatTime(classData.class_time)}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Class Photo */}
-              {photoUrl && (
-                <div className="mt-6 overflow-hidden rounded-xl bg-gray-100">
-                  <img
-                    src={photoUrl}
-                    alt={classData.class_name || "Class Photo"}
-                    className="block h-auto w-full object-cover"
-                  />
-                </div>
-              )}
-
-              {/* Download Button */}
-              {photoUrl && (
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  className="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-black px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {downloading ? (
-                    <>
-                      <svg
-                        className="h-4 w-4 animate-spin"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="9"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                        />
-
-                        <path
-                          className="opacity-90"
-                          fill="currentColor"
-                          d="M21 12a9 9 0 00-9-9v3a6 6 0 016 6h3z"
-                        />
-                      </svg>
-
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
-                        />
-                      </svg>
-
-                      Download Photo
-                    </>
-                  )}
-                </button>
-              )}
-
-              {/* Try Another Code */}
-              <button
-                type="button"
-                onClick={handleTryAnotherCode}
-                disabled={downloading}
-                className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-300 px-5 py-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 4v5h5M20 20v-5h-5M5.5 9A7 7 0 0118 6.5M18.5 15A7 7 0 016 17.5"
-                  />
-                </svg>
-
-                Try Another Code
-              </button>
-
-              {/* Website Button */}
+    <main className="min-h-screen bg-[#f7f6f2] px-4 py-6 sm:px-6 sm:py-10 ">
+      <div className="mx-auto w-full max-w-6xl pt-[5vh]">
+        {/* Main Card */}
+        <div className="overflow-hidden rounded-3xl border border-[#e7e3da] bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+          {/* Header */}
+          <header className="border-b border-[#eeeae2] px-5 py-5 sm:px-8 ">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* Brand */}
               <a
                 href={SITE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-300 px-5 py-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 active:scale-[0.99]"
+                className="group flex items-center gap-3"
               >
-                Visit Our Website
-
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl  text-white">
+                  <img
+                    src="/logo.png"
+                    alt="Gastronomic Arts Barcelona"
+                    className="h-full w-full object-contain"
                   />
-                </svg>
+                </div>
+
+                <div>
+                  <p className="text-lg font-bold tracking-tight text-[#182433]">
+                    GAB LAB
+                  </p>
+
+                  <p className="text-xs font-medium text-[#7a8088]">
+                    Gastronomic Arts Barcelona
+                  </p>
+                </div>
               </a>
-            </>
+
+              {/* Social Icons */}
+              <div className="flex items-center gap-2">
+                <a
+                  href={SOCIAL_LINKS.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Instagram"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#e5eaf0] text-[#415a77] transition hover:bg-[#f5f6f8]"
+                >
+                  <FiInstagram size={17} />
+                </a>
+
+                <a
+                  href={SOCIAL_LINKS.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Facebook"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#e5eaf0] text-[#415a77] transition hover:bg-[#f5f6f8]"
+                >
+                  <FiFacebook size={17} />
+                </a>
+
+                <a
+                  href={SOCIAL_LINKS.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="LinkedIn"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#e5eaf0] text-[#415a77] transition hover:bg-[#f5f6f8]"
+                >
+                  <FiLinkedin size={17} />
+                </a>
+              </div>
+            </div>
+          </header>
+
+          {/* CONTENT */}
+          {!classData ? (
+            /* =========================
+               ACCESS CODE VIEW
+            ========================= */
+            <div className="grid md:grid-cols-2 ">
+              {/* Left */}
+              <section className="flex flex-col justify-center border-b border-[#eeeae2] p-6 sm:p-8 md:border-b-0 md:border-r lg:p-10">
+                <div className="max-w-md">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[#f1f3f5] text-[#415a77]">
+                    <FiCamera size={22} />
+                  </div>
+
+                  <p className="mb-2 text-sm font-semibold uppercase tracking-[0.12em] text-[#8a9098]">
+                    Guest Photo Access
+                  </p>
+
+                  <h1 className="text-3xl font-bold tracking-tight text-[#182433] sm:text-4xl">
+                    Find your class photo
+                  </h1>
+
+                  <p className="mt-3 text-sm leading-6 text-[#667085] sm:text-base">
+                    Enter the unique 6-digit access code provided after your
+                    cooking experience to view and download your class photo.
+                  </p>
+                </div>
+              </section>
+
+              {/* Right */}
+              <section className="p-6 sm:p-8 lg:p-10">
+                <form onSubmit={handleVerify} className="mx-auto max-w-md">
+                  <label
+                    htmlFor="accessCode"
+                    className="mb-2 block text-sm font-semibold text-[#182433]"
+                  >
+                    Access Code
+                  </label>
+
+                  <input
+                    id="accessCode"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={accessCode}
+                    onChange={(e) => {
+                      const value = e.target.value
+                        .replace(/\D/g, "")
+                        .slice(0, 6);
+
+                      setAccessCode(value);
+                      setError("");
+                    }}
+                    placeholder="Enter 6-digit code"
+                    className="h-12 w-full rounded-xl border border-[#dfe4ea] bg-white px-4 text-center text-lg font-semibold tracking-[0.25em] text-[#182433] outline-none transition placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-[#a0a6ad] focus:border-[#415a77] focus:ring-4 focus:ring-[#415a77]/10"
+                  />
+
+                  {error && (
+                    <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading || accessCode.length !== 6}
+                    className="mt-4 flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#182433] px-5 text-sm font-semibold text-white transition hover:bg-[#243447] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Checking...
+                      </>
+                    ) : (
+                      <>
+                        View My Photo
+                        <FiArrowRight size={17} />
+                      </>
+                    )}
+                  </button>
+
+                  <p className="mt-4 text-center text-xs leading-5 text-[#8a9098]">
+                    Your access code is unique to your cooking class.
+                  </p>
+                </form>
+              </section>
+            </div>
+          ) : (
+            /* =========================
+               PHOTO RESULT VIEW
+            ========================= */
+            <div className="grid md:grid-cols-2">
+              {/* LEFT — CLASS INFO */}
+              <section className="border-b border-[#eeeae2] p-6 sm:p-8 md:border-b-0 md:border-r lg:p-10">
+                <div className="flex h-full flex-col">
+                  {/* Verified Badge */}
+                  <div className="mb-6 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-50 text-green-600">
+                      <FiCheck size={16} />
+                    </div>
+
+                    <span className="text-sm font-semibold text-green-700">
+                      Access verified
+                    </span>
+                  </div>
+
+                  <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#8a9098]">
+                    Your Cooking Class
+                  </p>
+
+                  <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#182433] sm:text-3xl">
+                    {classData.class_name || "Cooking Class"}
+                  </h1>
+
+                  {/* Class Details */}
+                  <div className="mt-7 space-y-3">
+                    <div className="rounded-xl border border-[#e8ebef] bg-[#fafbfc] p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[#8a9098]">
+                        Date
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-[#182433]">
+                        {formatDate(classData.class_date)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#e8ebef] bg-[#fafbfc] p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[#8a9098]">
+                        Time
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-[#182433]">
+                        {formatTime(classData.class_time)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#e8ebef] bg-[#fafbfc] p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[#8a9098]">
+                        Access Code
+                      </p>
+
+                      <p className="mt-1 font-mono text-sm font-semibold tracking-widest text-[#415a77]">
+                        {classData.access_code || accessCode}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Spacer */}
+                  <div className="flex-1" />
+
+                  {/* Try Another */}
+                  <button
+                    type="button"
+                    onClick={handleTryAnother}
+                    className="mt-6 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#dfe4ea] bg-white px-5 text-sm font-semibold text-[#415a77] transition hover:bg-[#f7f8fa]"
+                  >
+                    <FiRefreshCw size={16} />
+                    Try Another Code
+                  </button>
+                </div>
+              </section>
+
+              {/* RIGHT — PHOTO */}
+              <section className="p-6 sm:p-8 lg:p-10">
+                <div className="flex h-full flex-col">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[#182433]">
+                        Your Class Photo
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-[#8a9098]">
+                        Ready to view and download
+                      </p>
+                    </div>
+
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f1f3f5] text-[#415a77]">
+                      <FiCamera size={17} />
+                    </div>
+                  </div>
+
+                  {/* Photo */}
+                  {photoUrl ? (
+                    <div className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-[#f3f4f6]">
+                      <img
+                        src={photoUrl}
+                        alt={`${classData.class_name || "Cooking class"} group photo`}
+                        className="block h-auto max-h-[480px] w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[280px] flex-1 items-center justify-center rounded-2xl border border-dashed border-[#d9dde3] bg-[#fafbfc]">
+                      <div className="text-center">
+                        <FiCamera
+                          size={30}
+                          className="mx-auto text-[#a0a6ad]"
+                        />
+
+                        <p className="mt-3 text-sm font-medium text-[#667085]">
+                          No photo available
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      disabled={!photoUrl || downloading}
+                      className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#182433] px-5 text-sm font-semibold text-white transition hover:bg-[#243447] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {downloading ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <FiDownload size={17} />
+                          Download Photo
+                        </>
+                      )}
+                    </button>
+
+                    <a
+                      href={SITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[#dfe4ea] bg-white px-5 text-sm font-semibold text-[#415a77] transition hover:bg-[#f7f8fa]"
+                    >
+                      Visit Website
+                      <FiExternalLink size={15} />
+                    </a>
+                  </div>
+                </div>
+              </section>
+            </div>
           )}
+
+          {/* Footer */}
+          <footer className="border-t border-[#eeeae2] bg-[#fafaf9] px-5 py-5 sm:px-8">
+            <div className="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+              <p className="text-xs text-[#8a9098]">
+                © {new Date().getFullYear()} Gastronomic Arts Barcelona
+              </p>
+
+              <div className="flex items-center gap-4">
+                <a
+                  href={SITE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-[#415a77] transition hover:text-[#182433]"
+                >
+                  Gastronomic Arts Barcelona
+                </a>
+
+                <span className="text-[#d0d3d6]">•</span>
+
+                <a
+                  href={SOCIAL_LINKS.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-[#415a77] transition hover:text-[#182433]"
+                >
+                  @gablabbcn
+                </a>
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
     </main>
   );
 }
-
