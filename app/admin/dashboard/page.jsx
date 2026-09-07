@@ -6,45 +6,10 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 
 const PAGE_SIZE = 12;
 
-function formatDate(dateStr) {
-  if (!dateStr) return "—";
-
-  const date = new Date(`${dateStr}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) return dateStr;
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(timeStr) {
-  if (!timeStr) return "";
-
-  const [hours, minutes] = timeStr.split(":");
-  const hour = parseInt(hours, 10);
-
-  if (Number.isNaN(hour)) return timeStr;
-
-  const suffix = hour >= 12 ? "PM" : "AM";
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-
-  return `${displayHour}:${minutes || "00"} ${suffix}`;
-}
-
-function getPhotoUrl(path) {
-  if (!path) return null;
-
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/class-photos/${path}`;
-}
-
-export default function AdminClassesPage() {
+export default function AdminDashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
-
   const [classes, setClasses] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -52,26 +17,24 @@ export default function AdminClassesPage() {
   const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
-  const [photoFilter, setPhotoFilter] = useState("all");
   const [sort, setSort] = useState("newest");
 
   const [page, setPage] = useState(1);
 
   const [previewPhoto, setPreviewPhoto] = useState(null);
 
-  // ---------------------------------------------------------
-  // AUTH
-  // ---------------------------------------------------------
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  // --------------------------------------------------
+  // AUTH CHECK
+  // --------------------------------------------------
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadUser() {
+    async function checkUser() {
       const {
         data: { user },
       } = await supabaseBrowser.auth.getUser();
-
-      if (!mounted) return;
 
       if (!user) {
         router.replace("/admin/login");
@@ -81,22 +44,18 @@ export default function AdminClassesPage() {
       setUser(user);
     }
 
-    loadUser();
-
-    return () => {
-      mounted = false;
-    };
+    checkUser();
   }, [router]);
 
-  // ---------------------------------------------------------
+  // --------------------------------------------------
   // LOAD CLASSES
-  // ---------------------------------------------------------
+  // --------------------------------------------------
 
   useEffect(() => {
     if (!user) return;
 
     loadClasses();
-  }, [user, page, search, photoFilter, sort]);
+  }, [user, page, search, sort]);
 
   async function loadClasses() {
     try {
@@ -110,34 +69,16 @@ export default function AdminClassesPage() {
         .from("classes")
         .select("*", { count: "exact" });
 
-      // -----------------------------------------------------
       // SEARCH
-      // -----------------------------------------------------
-
       if (search.trim()) {
-        const value = search.trim().replace(/,/g, "");
+        const value = search.trim();
 
         query = query.or(
           `class_name.ilike.%${value}%,access_code.ilike.%${value}%`,
         );
       }
 
-      // -----------------------------------------------------
-      // PHOTO FILTER
-      // -----------------------------------------------------
-
-      if (photoFilter === "with-photo") {
-        query = query.not("photo_path", "is", null);
-      }
-
-      if (photoFilter === "without-photo") {
-        query = query.is("photo_path", null);
-      }
-
-      // -----------------------------------------------------
       // SORT
-      // -----------------------------------------------------
-
       if (sort === "newest") {
         query = query
           .order("class_date", { ascending: false })
@@ -148,151 +89,236 @@ export default function AdminClassesPage() {
           .order("class_time", { ascending: true });
       }
 
-      // -----------------------------------------------------
-      // DATABASE PAGINATION
-      // -----------------------------------------------------
+      // PAGINATION
+      query = query.range(from, to);
 
-      const { data, error: queryError, count } = await query.range(from, to);
+      const { data, count, error: fetchError } = await query;
 
-      if (queryError) {
-        console.error(queryError);
-        throw queryError;
+      if (fetchError) {
+        console.error("Load classes error:", fetchError);
+        throw fetchError;
       }
 
       setClasses(data || []);
       setTotalCount(count || 0);
     } catch (err) {
-      console.error(err);
-      setError("We couldn't load the classes. Please try again.");
+      console.error("Load classes error:", err);
+
+      setError(
+        err.message ||
+          "We couldn't load the classes. Please refresh and try again.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  // ---------------------------------------------------------
-  // RESET PAGE WHEN FILTER CHANGES
-  // ---------------------------------------------------------
+  // --------------------------------------------------
+  // RESET PAGE WHEN SEARCH / SORT CHANGES
+  // --------------------------------------------------
 
   useEffect(() => {
     setPage(1);
-  }, [search, photoFilter, sort]);
+  }, [search, sort]);
 
-  // ---------------------------------------------------------
-  // PAGINATION
-  // ---------------------------------------------------------
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-
-  const currentPage = Math.min(page, totalPages);
-
-  const showingFrom = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-
-  const showingTo = Math.min(currentPage * PAGE_SIZE, totalCount);
-
-  const paginationItems = useMemo(() => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1);
-    }
-
-    const items = [];
-
-    items.push(1);
-
-    if (currentPage > 3) {
-      items.push("left-ellipsis");
-    }
-
-    const start = Math.max(2, currentPage - 1);
-    const end = Math.min(totalPages - 1, currentPage + 1);
-
-    for (let i = start; i <= end; i++) {
-      items.push(i);
-    }
-
-    if (currentPage < totalPages - 2) {
-      items.push("right-ellipsis");
-    }
-
-    items.push(totalPages);
-
-    return items;
-  }, [totalPages, currentPage]);
-
-  // ---------------------------------------------------------
+  // --------------------------------------------------
   // LOGOUT
-  // ---------------------------------------------------------
+  // --------------------------------------------------
 
   async function handleLogout() {
     await supabaseBrowser.auth.signOut();
     router.replace("/admin/login");
   }
 
-  // ---------------------------------------------------------
+  // --------------------------------------------------
   // CLEAR FILTERS
-  // ---------------------------------------------------------
+  // --------------------------------------------------
 
   function clearFilters() {
     setSearch("");
-    setPhotoFilter("all");
     setSort("newest");
     setPage(1);
   }
 
-  // ---------------------------------------------------------
-  // LOADING SCREEN
-  // ---------------------------------------------------------
+  // --------------------------------------------------
+  // DELETE CLASS
+  // --------------------------------------------------
 
-  if (!user) {
+  async function handleDelete() {
+    if (!deleteTarget) return;
+
+    try {
+      setDeletingId(deleteTarget.id);
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabaseBrowser.auth.getSession();
+
+      if (!session?.access_token) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const response = await fetch(`/api/admin/classes/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete class.");
+      }
+
+      setDeleteTarget(null);
+      setPreviewPhoto(null);
+
+      await loadClasses();
+    } catch (err) {
+      console.error("Delete error:", err);
+
+      setError(
+        err.message || "We couldn't delete the class. Please try again.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  // --------------------------------------------------
+  // PAGINATION
+  // --------------------------------------------------
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const pageNumbers = useMemo(() => {
+    const pages = [];
+
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  }, [totalPages]);
+
+  // --------------------------------------------------
+  // PHOTO URL
+  // --------------------------------------------------
+
+  function getPhotoUrl(photoPath) {
+    if (!photoPath) return null;
+
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/class-photos/${photoPath}`;
+  }
+
+  // --------------------------------------------------
+  // FORMAT DATE
+  // --------------------------------------------------
+
+  function formatDate(date) {
+    if (!date) return "-";
+
+    try {
+      return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return date;
+    }
+  }
+
+  // --------------------------------------------------
+  // FORMAT TIME
+  // --------------------------------------------------
+
+  function formatTime(time) {
+    if (!time) return "-";
+
+    try {
+      const [hours, minutes] = time.split(":");
+
+      const date = new Date();
+
+      date.setHours(Number(hours), Number(minutes), 0, 0);
+
+      return date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return time;
+    }
+  }
+
+  // --------------------------------------------------
+  // LOADING SCREEN
+  // --------------------------------------------------
+
+  if (!user && loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f8f9fb]">
+      <main className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="flex items-center gap-3 text-sm text-slate-500">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-800" />
-          Loading...
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" />
+          Loading dashboard...
         </div>
       </main>
     );
   }
 
-  // ---------------------------------------------------------
+  // --------------------------------------------------
   // UI
-  // ---------------------------------------------------------
+  // --------------------------------------------------
 
   return (
-    <main className="min-h-screen bg-[#f8f9fb] text-slate-900">
-      {/* =====================================================
+    <main className="min-h-screen bg-slate-50">
+      {/* ================================================
           HEADER
-      ====================================================== */}
+      ================================================= */}
 
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-[72px] max-w-[1400px] items-center justify-between px-5 sm:px-8">
-          {/* Brand */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6 lg:px-8">
+          {/* LOGO / TITLE */}
 
           <div className="flex items-center gap-3">
-            <div className="flex h-16 w-auto  items-center justify-center overflow-hidden rounded-xl bg-white">
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
               <img
                 src="/logo.png"
-                alt="Gablab Kitchen Studio"
+                alt="Gastronomic Arts Barcelona"
                 className="h-full w-full object-contain"
               />
             </div>
 
             <div>
-              <h1 className="text-[15px] font-semibold tracking-tight text-slate-900">
-                Gablab Kitchen Studio
+              <h1 className="text-base font-semibold tracking-tight text-slate-950 sm:text-lg">
+                Admin Dashboard
               </h1>
 
-              <p className="hidden text-xs text-slate-400 sm:block">
-                Photo management
+              <p className="hidden text-xs text-slate-500 sm:block">
+                Manage your cooking class photos
               </p>
             </div>
           </div>
 
-          {/* Right */}
+          {/* RIGHT SIDE */}
 
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-medium text-slate-700">
+                {user?.email}
+              </p>
+
+              <p className="text-[11px] text-slate-400">Administrator</p>
+            </div>
+
             <button
-              onClick={() => router.push("/admin/classes/new")}
-              className=" cursor-pointer inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 active:scale-[0.98]"
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               <svg
                 className="h-4 w-4"
@@ -301,57 +327,100 @@ export default function AdminClassesPage() {
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 17l5-5-5-5"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 12H3"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 19V5a2 2 0 0 0-2-2h-4"
+                />
               </svg>
 
-              <span>New Class</span>
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="hidden cursor-pointer h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:inline-flex"
-            >
-              Log out
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* =====================================================
-          MAIN
-      ====================================================== */}
+      {/* ================================================
+          CONTENT
+      ================================================= */}
 
-      <div className="mx-auto max-w-[1400px] px-5 py-8 sm:px-8">
-        {/* Page title */}
+      <section className="mx-auto max-w-7xl px-5 py-6 sm:px-6 lg:px-8">
+        {/* TOP TITLE */}
 
-        <div className="mb-7">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-            Photos
-          </h2>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+              Classes
+            </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Manage all class photos in one place.
-          </p>
+            <p className="mt-1 text-sm text-slate-500">
+              View and manage all your cooking classes.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/admin/classes/new")}
+            className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14" />
+
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+            </svg>
+            New Class
+          </button>
         </div>
 
-        {/* =================================================
+        {/* ================================================
+            ERROR
+        ================================================= */}
+
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* ================================================
             TOOLBAR
-        ================================================== */}
+        ================================================= */}
 
-        <section className="rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-            {/* Search */}
+        <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {/* SEARCH */}
 
-            <div className="relative w-full lg:max-w-[380px]">
+            <div className="relative w-full lg:max-w-md">
               <svg
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
               >
                 <circle cx="11" cy="11" r="7" />
-                <path strokeLinecap="round" d="m20 20-4-4" />
+
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m20 20-4-4"
+                />
               </svg>
 
               <input
@@ -359,296 +428,290 @@ export default function AdminClassesPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search class or guest code..."
-                className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               />
             </div>
 
-            {/* Filters */}
+            {/* SORT + CLEAR */}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Photo filter */}
-
-              <select
-                value={photoFilter}
-                onChange={(e) => setPhotoFilter(e.target.value)}
-                className=" cursor-pointer h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
-              >
-                <option value="all">All photos</option>
-                <option value="with-photo">With photos</option>
-                <option value="without-photo">No photos</option>
-              </select>
-
-              {/* Sort */}
-
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className=" cursor-pointer h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               >
                 <option value="newest">Newest first</option>
+
                 <option value="oldest">Oldest first</option>
               </select>
 
-              {(search || photoFilter !== "all" || sort !== "newest") && (
+              {(search || sort !== "newest") && (
                 <button
+                  type="button"
                   onClick={clearFilters}
-                  className=" cursor-pointer h-11 rounded-lg px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Result count */}
-
-          <div className="border-t border-slate-100 px-5 py-3">
-            <p className="text-xs text-slate-400">
-              {loading
-                ? "Loading..."
-                : `${totalCount} ${totalCount === 1 ? "class" : "classes"}`}
-            </p>
-          </div>
-        </section>
-
-        {/* =================================================
-            ERROR
-        ================================================== */}
-
-        {error && (
-          <div className="mt-4 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span>{error}</span>
-
-            <button onClick={loadClasses} className="font-medium underline">
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* =================================================
-            CONTENT
-        ================================================== */}
-
-        <section className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          {/* LOADING */}
-
-          {loading && (
-            <div className="divide-y divide-slate-100">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-16 w-20 animate-pulse rounded-lg bg-slate-100" />
-
-                  <div className="flex-1">
-                    <div className="h-4 w-40 animate-pulse rounded bg-slate-100" />
-
-                    <div className="mt-2 h-3 w-28 animate-pulse rounded bg-slate-100" />
-                  </div>
-
-                  <div className="hidden h-3 w-24 animate-pulse rounded bg-slate-100 sm:block" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* EMPTY */}
-
-          {!loading && classes.length === 0 && (
-            <div className="px-6 py-20 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-                <svg
-                  className="h-6 w-6 text-slate-400"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 15-5-5L5 21"
-                  />
-                </svg>
-              </div>
-
-              <h3 className="mt-4 text-sm font-semibold text-slate-900">
-                No classes found
-              </h3>
-
-              <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">
-                {search || photoFilter !== "all"
-                  ? "Try changing your search or filters."
-                  : "Create your first class and upload photos."}
-              </p>
-
-              {search || photoFilter !== "all" ? (
-                <button
-                  onClick={clearFilters}
-                  className="mt-5 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                 >
                   Clear filters
                 </button>
-              ) : (
-                <button
-                  onClick={() => router.push("/admin/classes/new")}
-                  className="mt-5 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
-                >
-                  Create New Class
-                </button>
               )}
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* =================================================
-              DESKTOP LIST
-          ================================================== */}
+        {/* ================================================
+            TABLE / LIST
+        ================================================= */}
 
-          {!loading && classes.length > 0 && (
-            <>
-              <div className="hidden md:block">
-                {/* Header */}
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {/* DESKTOP TABLE */}
 
-                <div className="grid grid-cols-[minmax(0,1fr)_180px_160px_120px] border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  <span>Class</span>
-                  <span>Date</span>
-                  <span>Guest code</span>
-                  <span>Status</span>
-                </div>
+          <div className="hidden md:block">
+            <div className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div>Class</div>
+              <div>Date</div>
+              <div>Guest Code</div>
+              <div>Status</div>
+              <div className="text-right">Actions</div>
+            </div>
 
-                {/* Rows */}
-
-                <div className="divide-y divide-slate-100">
-                  {classes.map((item) => {
-                    const photoUrl = getPhotoUrl(item.photo_path);
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="grid grid-cols-[minmax(0,1fr)_180px_160px_120px] items-center px-5 py-4 transition hover:bg-slate-50"
-                      >
-                        {/* Class */}
-
-                        <div className="flex min-w-0 items-center gap-4">
-                          {photoUrl ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreviewPhoto({
-                                  url: photoUrl,
-                                  name: item.class_name || "Photo",
-                                })
-                              }
-                              className="group relative h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100"
-                            >
-                              <img
-                                src={photoUrl}
-                                alt={item.class_name || "Class photo"}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                              />
-
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
-                                <svg
-                                  className="h-5 w-5"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    d="m15 12-4-3v6l4-3Z"
-                                  />
-                                </svg>
-                              </div>
-                            </button>
-                          ) : (
-                            <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[11px] font-medium text-slate-400">
-                              No photo
-                            </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">
-                              {item.class_name || "Untitled class"}
-                            </p>
-
-                            <p className="mt-1 text-xs text-slate-400">
-                              Class ID: {item.id}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Date */}
-
-                        <div>
-                          <p className="text-sm text-slate-700">
-                            {formatDate(item.class_date)}
-                          </p>
-
-                          {item.class_time && (
-                            <p className="mt-1 text-xs text-slate-400">
-                              {formatTime(item.class_time)}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Access code */}
-
-                        <div>
-                          {item.access_code ? (
-                            <span className="inline-flex rounded-md bg-slate-100 px-2.5 py-1.5 font-mono text-xs font-semibold tracking-wider text-slate-700">
-                              {item.access_code}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </div>
-
-                        {/* Status */}
-
-                        <div>
-                          {photoUrl ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              Uploaded
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                              No photo
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+            {loading ? (
+              <div className="flex min-h-[280px] items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" />
+                  Loading classes...
                 </div>
               </div>
-
-              {/* =================================================
-                  MOBILE LIST
-              ================================================== */}
-
-              <div className="divide-y divide-slate-100 md:hidden">
+            ) : classes.length > 0 ? (
+              <div className="divide-y divide-slate-100">
                 {classes.map((item) => {
                   const photoUrl = getPhotoUrl(item.photo_path);
 
                   return (
-                    <div key={item.id} className="p-4">
-                      <div className="flex gap-3">
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] items-center px-5 py-4 transition hover:bg-slate-50/70"
+                    >
+                      {/* CLASS */}
+
+                      <div className="flex min-w-0 items-center gap-3">
                         {photoUrl ? (
                           <button
                             type="button"
                             onClick={() =>
                               setPreviewPhoto({
                                 url: photoUrl,
-                                name: item.class_name || "Photo",
+                                name: item.class_name || "Class photo",
                               })
                             }
-                            className="h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100"
+                            className="h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                          >
+                            <img
+                              src={photoUrl}
+                              alt={item.class_name || "Class photo"}
+                              className="h-full w-full object-cover transition hover:scale-105"
+                            />
+                          </button>
+                        ) : (
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+                            <svg
+                              className="h-5 w-5 text-slate-300"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.7"
+                            >
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m21 15-5-5L5 21"
+                              />
+                            </svg>
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {item.class_name || "Untitled class"}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            {formatTime(item.class_time)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* DATE */}
+
+                      <div className="text-sm text-slate-600">
+                        {formatDate(item.class_date)}
+                      </div>
+
+                      {/* CODE */}
+
+                      <div>
+                        <span className="inline-flex rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold tracking-wider text-slate-700">
+                          {item.access_code || "-"}
+                        </span>
+                      </div>
+
+                      {/* STATUS */}
+
+                      <div>
+                        {photoUrl ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Photo ready
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            No photo
+                          </span>
+                        )}
+                      </div>
+
+                      {/* ACTIONS */}
+
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(item)}
+                          disabled={deletingId === item.id}
+                          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          title="Delete class"
+                        >
+                          {deletingId === item.id ? (
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                          ) : (
+                            <svg
+                              className="h-4 w-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M3 6h18"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 6V4h8v2"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m19 6-1 14H6L5 6"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M10 11v5M14 11v5"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* DESKTOP EMPTY */
+
+              <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                  <svg
+                    className="h-6 w-6 text-slate-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m21 15-5-5L5 21"
+                    />
+                  </svg>
+                </div>
+
+                <h3 className="mt-4 text-sm font-semibold text-slate-900">
+                  No classes found
+                </h3>
+
+                <p className="mt-1 max-w-sm text-sm text-slate-500">
+                  {search
+                    ? "Try changing your search or filters."
+                    : "Create your first class and upload photos."}
+                </p>
+
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/classes/new")}
+                    className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Create Class
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ================================================
+              MOBILE LIST
+          ================================================= */}
+
+          <div className="md:hidden">
+            {loading ? (
+              <div className="flex min-h-[280px] items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" />
+                  Loading classes...
+                </div>
+              </div>
+            ) : classes.length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {classes.map((item) => {
+                  const photoUrl = getPhotoUrl(item.photo_path);
+
+                  return (
+                    <div key={item.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        {/* PHOTO */}
+
+                        {photoUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewPhoto({
+                                url: photoUrl,
+                                name: item.class_name || "Class photo",
+                              })
+                            }
+                            className="h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                           >
                             <img
                               src={photoUrl}
@@ -657,184 +720,447 @@ export default function AdminClassesPage() {
                             />
                           </button>
                         ) : (
-                          <div className="flex h-20 w-24 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-medium text-slate-400">
-                            No photo
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+                            <svg
+                              className="h-6 w-6 text-slate-300"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.7"
+                            >
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m21 15-5-5L5 21"
+                              />
+                            </svg>
                           </div>
                         )}
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-sm font-semibold text-slate-900">
-                              {item.class_name || "Untitled class"}
-                            </p>
+                        {/* DETAILS */}
 
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-semibold text-slate-900">
+                            {item.class_name || "Untitled class"}
+                          </h3>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                            <span>{formatDate(item.class_date)}</span>
+
+                            <span>{formatTime(item.class_time)}</span>
+                          </div>
+
+                          <div className="mt-2">
+                            <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] font-semibold tracking-wider text-slate-700">
+                              {item.access_code || "-"}
+                            </span>
+                          </div>
+
+                          <div className="mt-2">
                             {photoUrl ? (
-                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
-                                Uploaded
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                Photo ready
                               </span>
                             ) : (
-                              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                                 No photo
                               </span>
                             )}
                           </div>
-
-                          <p className="mt-2 text-xs text-slate-500">
-                            {formatDate(item.class_date)}
-                            {item.class_time
-                              ? ` · ${formatTime(item.class_time)}`
-                              : ""}
-                          </p>
-
-                          {item.access_code && (
-                            <span className="mt-2 inline-flex rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] font-semibold tracking-wider text-slate-600">
-                              {item.access_code}
-                            </span>
-                          )}
                         </div>
+
+                        {/* DELETE */}
+
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(item)}
+                          disabled={deletingId === item.id}
+                          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          title="Delete class"
+                        >
+                          {deletingId === item.id ? (
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                          ) : (
+                            <svg
+                              className="h-4 w-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M3 6h18"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 6V4h8v2"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m19 6-1 14H6L5 6"
+                              />
+
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M10 11v5M14 11v5"
+                              />
+                            </svg>
+                          )}
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </>
-          )}
+            ) : (
+              /* MOBILE EMPTY */
 
-          {/* =================================================
-              PAGINATION
-          ================================================== */}
-
-          {!loading && totalCount > 0 && (
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-slate-500">
-                Showing{" "}
-                <span className="font-medium text-slate-700">
-                  {showingFrom}
-                </span>
-                {" – "}
-                <span className="font-medium text-slate-700">{showingTo}</span>
-                {" of "}
-                <span className="font-medium text-slate-700">{totalCount}</span>
-              </p>
-
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  {/* Previous */}
-
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
+              <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                  <svg
+                    className="h-6 w-6 text-slate-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
                   >
-                    <svg
-                      className="h-3.5 w-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m15 18-6-6 6-6"
-                      />
-                    </svg>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
 
-                    <span className="hidden sm:block">Previous</span>
-                  </button>
+                    <circle cx="8.5" cy="8.5" r="1.5" />
 
-                  {/* Numbers */}
-
-                  {paginationItems.map((item, index) => {
-                    if (typeof item === "string") {
-                      return (
-                        <span
-                          key={`${item}-${index}`}
-                          className="flex h-9 w-8 items-center justify-center text-xs text-slate-400"
-                        >
-                          …
-                        </span>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={item}
-                        onClick={() => setPage(item)}
-                        className={`h-9 w-9 rounded-lg text-xs font-medium transition ${
-                          item === currentPage
-                            ? "bg-slate-900 text-white"
-                            : "text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
-
-                  {/* Next */}
-
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    <span className="hidden sm:block">Next</span>
-
-                    <svg
-                      className="h-3.5 w-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m9 18 6-6-6-6"
-                      />
-                    </svg>
-                  </button>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m21 15-5-5L5 21"
+                    />
+                  </svg>
                 </div>
-              )}
+
+                <h3 className="mt-4 text-sm font-semibold text-slate-900">
+                  No classes found
+                </h3>
+
+                <p className="mt-1 max-w-sm text-sm text-slate-500">
+                  {search
+                    ? "Try changing your search or filters."
+                    : "Create your first class and upload photos."}
+                </p>
+
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/classes/new")}
+                    className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Create Class
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ================================================
+            PAGINATION
+        ================================================= */}
+
+        {!loading && classes.length > 0 && totalPages > 1 && (
+          <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
+            <p className="text-xs text-slate-500">
+              Showing{" "}
+              <span className="font-medium text-slate-700">
+                {(page - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-medium text-slate-700">
+                {Math.min(page * PAGE_SIZE, totalCount)}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-slate-700">{totalCount}</span>{" "}
+              classes
+            </p>
+
+            <div className="flex items-center gap-1">
+              {/* PREVIOUS */}
+
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m15 18-6-6 6-6"
+                  />
+                </svg>
+              </button>
+
+              {/* PAGE NUMBERS */}
+
+              {pageNumbers.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => setPage(pageNumber)}
+                  className={`flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg px-2 text-sm font-medium transition ${
+                    page === pageNumber
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              {/* NEXT */}
+
+              <button
+                type="button"
+                disabled={page === totalPages}
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m9 18 6-6-6-6"
+                  />
+                </svg>
+              </button>
             </div>
-          )}
-        </section>
-      </div>
+          </div>
+        )}
+      </section>
 
-      {/* =====================================================
-          PHOTO PREVIEW MODAL
-      ====================================================== */}
+      {/* ================================================
+          DELETE CONFIRMATION MODAL
+      ================================================= */}
 
-      {previewPhoto && (
+      {deleteTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm"
-          onClick={() => setPreviewPhoto(null)}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm"
+          onClick={() => {
+            if (!deletingId) {
+              setDeleteTarget(null);
+            }
+          }}
         >
           <div
-            className="relative max-h-[90vh] max-w-[95vw]"
+            className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setPreviewPhoto(null)}
-              className="absolute cursor-pointer -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg transition hover:bg-slate-100"
-            >
+            {/* WARNING ICON */}
+
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
               <svg
-                className="h-4 w-4"
+                className="h-6 w-6 text-red-600"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path strokeLinecap="round" d="M6 6l12 12M18 6 6 18" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v4"
+                />
+
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 17h.01"
+                />
+
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
+                />
+              </svg>
+            </div>
+
+            {/* CONTENT */}
+
+            <div className="mt-5">
+              <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+                Delete this class?
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Are you sure you want to delete{" "}
+                <span className="font-semibold text-slate-700">
+                  "{deleteTarget.class_name || "this class"}"
+                </span>
+                ?
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-red-600">
+                This action cannot be undone. The class and its uploaded photo
+                will be permanently deleted.
+              </p>
+            </div>
+
+            {/* BUTTONS */}
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={deletingId === deleteTarget.id}
+                onClick={() => setDeleteTarget(null)}
+                className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={deletingId === deleteTarget.id}
+                onClick={handleDelete}
+                className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition hover:bg-red-700 disabled:pointer-events-none disabled:opacity-70"
+              >
+                {deletingId === deleteTarget.id ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-300 border-t-white" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 6h18"
+                      />
+
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M8 6V4h8v2"
+                      />
+
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m19 6-1 14H6L5 6"
+                      />
+
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M10 11v5M14 11v5"
+                      />
+                    </svg>
+                    Delete Class
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================
+          PHOTO PREVIEW MODAL
+      ================================================= */}
+
+      {previewPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm"
+          onClick={() => setPreviewPhoto(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-5xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE */}
+
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+              className="absolute -right-2 -top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-slate-700 shadow-lg transition hover:bg-slate-100"
+              title="Close"
+            >
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 6l12 12"
+                />
+
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M18 6 6 18"
+                />
               </svg>
             </button>
+
+            {/* IMAGE */}
 
             <img
               src={previewPhoto.url}
               alt={previewPhoto.name}
-              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+              className="max-h-[85vh] max-w-full rounded-xl object-contain shadow-2xl"
             />
+
+            {/* PHOTO NAME */}
+
+            {previewPhoto.name && (
+              <div className="mt-3 text-center text-sm font-medium text-white">
+                {previewPhoto.name}
+              </div>
+            )}
           </div>
         </div>
       )}
