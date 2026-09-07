@@ -1,12 +1,12 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import { BsTrash2 } from "react-icons/bs";
-import { FaFilePen, FaTrash } from "react-icons/fa6";
 
 const PAGE_SIZE = 12;
+const SEARCH_DEBOUNCE = 400;
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState("newest");
 
   const [page, setPage] = useState(1);
@@ -50,6 +51,26 @@ export default function AdminDashboard() {
   }, [router]);
 
   // --------------------------------------------------
+  // SEARCH DEBOUNCE
+  // --------------------------------------------------
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, SEARCH_DEBOUNCE);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // --------------------------------------------------
+  // RESET PAGE WHEN SEARCH / SORT CHANGES
+  // --------------------------------------------------
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, sort]);
+
+  // --------------------------------------------------
   // LOAD CLASSES
   // --------------------------------------------------
 
@@ -57,7 +78,7 @@ export default function AdminDashboard() {
     if (!user) return;
 
     loadClasses();
-  }, [user, page, search, sort]);
+  }, [user, page, debouncedSearch, sort]);
 
   async function loadClasses() {
     try {
@@ -72,8 +93,8 @@ export default function AdminDashboard() {
         .select("*", { count: "exact" });
 
       // SEARCH
-      if (search.trim()) {
-        const value = search.trim();
+      if (debouncedSearch.trim()) {
+        const value = debouncedSearch.trim();
 
         query = query.or(
           `class_name.ilike.%${value}%,access_code.ilike.%${value}%`,
@@ -84,11 +105,13 @@ export default function AdminDashboard() {
       if (sort === "newest") {
         query = query
           .order("class_date", { ascending: false })
-          .order("class_time", { ascending: false });
+          .order("class_time", { ascending: false })
+          .order("id", { ascending: false });
       } else {
         query = query
           .order("class_date", { ascending: true })
-          .order("class_time", { ascending: true });
+          .order("class_time", { ascending: true })
+          .order("id", { ascending: true });
       }
 
       // PAGINATION
@@ -116,14 +139,6 @@ export default function AdminDashboard() {
   }
 
   // --------------------------------------------------
-  // RESET PAGE WHEN SEARCH / SORT CHANGES
-  // --------------------------------------------------
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, sort]);
-
-  // --------------------------------------------------
   // LOGOUT
   // --------------------------------------------------
 
@@ -138,6 +153,7 @@ export default function AdminDashboard() {
 
   function clearFilters() {
     setSearch("");
+    setDebouncedSearch("");
     setSort("newest");
     setPage(1);
   }
@@ -162,12 +178,15 @@ export default function AdminDashboard() {
         return;
       }
 
-      const response = await fetch(`/api/admin/classes/${deleteTarget.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
+      const response = await fetch(
+        `/api/admin/classes/${deleteTarget.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
         },
-      });
+      );
 
       const result = await response.json();
 
@@ -194,17 +213,42 @@ export default function AdminDashboard() {
   // PAGINATION
   // --------------------------------------------------
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalCount / PAGE_SIZE),
+  );
 
   const pageNumbers = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from(
+        { length: totalPages },
+        (_, index) => index + 1,
+      );
+    }
+
     const pages = [];
 
-    for (let i = 1; i <= totalPages; i++) {
+    pages.push(1);
+
+    if (page > 3) {
+      pages.push("...");
+    }
+
+    const start = Math.max(2, page - 1);
+    const end = Math.min(totalPages - 1, page + 1);
+
+    for (let i = start; i <= end; i++) {
       pages.push(i);
     }
 
+    if (page < totalPages - 2) {
+      pages.push("...");
+    }
+
+    pages.push(totalPages);
+
     return pages;
-  }, [totalPages]);
+  }, [page, totalPages]);
 
   // --------------------------------------------------
   // PHOTO URL
@@ -217,18 +261,30 @@ export default function AdminDashboard() {
   }
 
   // --------------------------------------------------
-  // FORMAT DATE
+  // THUMBNAIL URL
   // --------------------------------------------------
+
+  function getThumbnailUrl(photoPath) {
+    if (!photoPath) return null;
+
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/class-photos/${photoPath}?width=180&height=180&resize=cover&quality=70`;
+  }
+
+  
+
 
   function formatDate(date) {
     if (!date) return "-";
 
     try {
-      return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
+      return new Date(`${date}T00:00:00`).toLocaleDateString(
+        "en-US",
+        {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        },
+      );
     } catch {
       return date;
     }
@@ -246,7 +302,12 @@ export default function AdminDashboard() {
 
       const date = new Date();
 
-      date.setHours(Number(hours), Number(minutes), 0, 0);
+      date.setHours(
+        Number(hours),
+        Number(minutes),
+        0,
+        0,
+      );
 
       return date.toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -255,6 +316,21 @@ export default function AdminDashboard() {
     } catch {
       return time;
     }
+  }
+
+  // --------------------------------------------------
+  // OPEN PHOTO
+  // --------------------------------------------------
+
+  function openPhoto(item) {
+    const originalUrl = getPhotoUrl(item.photo_path);
+
+    if (!originalUrl) return;
+
+    setPreviewPhoto({
+      url: originalUrl,
+      name: item.class_name || "Class photo",
+    });
   }
 
   // --------------------------------------------------
@@ -278,13 +354,15 @@ export default function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-slate-50">
+
       {/* ================================================
           HEADER
       ================================================= */}
 
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6 lg:px-8">
-          {/* LOGO / TITLE */}
+
+          {/* LOGO */}
 
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -314,7 +392,9 @@ export default function AdminDashboard() {
                 {user?.email}
               </p>
 
-              <p className="text-[11px] text-slate-400">Administrator</p>
+              <p className="text-[11px] text-slate-400">
+                Administrator
+              </p>
             </div>
 
             <button
@@ -334,11 +414,13 @@ export default function AdminDashboard() {
                   strokeLinejoin="round"
                   d="M10 17l5-5-5-5"
                 />
+
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   d="M15 12H3"
                 />
+
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -346,7 +428,9 @@ export default function AdminDashboard() {
                 />
               </svg>
 
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">
+                Logout
+              </span>
             </button>
           </div>
         </div>
@@ -357,7 +441,8 @@ export default function AdminDashboard() {
       ================================================= */}
 
       <section className="mx-auto max-w-7xl px-5 py-6 sm:px-6 lg:px-8">
-        {/* TOP TITLE */}
+
+        {/* TITLE */}
 
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -372,7 +457,9 @@ export default function AdminDashboard() {
 
           <button
             type="button"
-            onClick={() => router.push("/admin/classes/new")}
+            onClick={() =>
+              router.push("/admin/classes/new")
+            }
             className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
           >
             <svg
@@ -382,17 +469,24 @@ export default function AdminDashboard() {
               stroke="currentColor"
               strokeWidth="2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 5v14"
+              />
 
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 12h14"
+              />
             </svg>
+
             New Class
           </button>
         </div>
 
-        {/* ================================================
-            ERROR
-        ================================================= */}
+        {/* ERROR */}
 
         {error && (
           <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -406,6 +500,7 @@ export default function AdminDashboard() {
 
         <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+
             {/* SEARCH */}
 
             <div className="relative w-full lg:max-w-md">
@@ -428,23 +523,31 @@ export default function AdminDashboard() {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
                 placeholder="Search class or guest code..."
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               />
             </div>
 
-            {/* SORT + CLEAR */}
+            {/* SORT */}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value)}
+                onChange={(e) =>
+                  setSort(e.target.value)
+                }
                 className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               >
-                <option value="newest">Newest first</option>
+                <option value="newest">
+                  Newest first
+                </option>
 
-                <option value="oldest">Oldest first</option>
+                <option value="oldest">
+                  Oldest first
+                </option>
               </select>
 
               {(search || sort !== "newest") && (
@@ -465,15 +568,19 @@ export default function AdminDashboard() {
         ================================================= */}
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* DESKTOP TABLE */}
+
+          {/* DESKTOP */}
 
           <div className="hidden md:block">
+
             <div className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <div>Class</div>
               <div>Date</div>
               <div>Guest Code</div>
               <div>Update Class</div>
-              <div className="text-right">Actions</div>
+              <div className="text-right">
+                Actions
+              </div>
             </div>
 
             {loading ? (
@@ -485,32 +592,50 @@ export default function AdminDashboard() {
               </div>
             ) : classes.length > 0 ? (
               <div className="divide-y divide-slate-100">
+
                 {classes.map((item) => {
-                  const photoUrl = getPhotoUrl(item.photo_path);
+                  const photoUrl =
+                    getPhotoUrl(item.photo_path);
+
+                  const thumbnailUrl =
+                    getThumbnailUrl(item.photo_path);
 
                   return (
                     <div
                       key={item.id}
                       className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] items-center px-5 py-4 transition hover:bg-slate-50/70"
                     >
+
                       {/* CLASS */}
 
                       <div className="flex min-w-0 items-center gap-3">
+
                         {photoUrl ? (
                           <button
                             type="button"
                             onClick={() =>
-                              setPreviewPhoto({
-                                url: photoUrl,
-                                name: item.class_name || "Class photo",
-                              })
+                              openPhoto(item)
                             }
                             className="h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                           >
                             <img
-                              src={photoUrl}
-                              alt={item.class_name || "Class photo"}
-                              className="h-full w-full object-cover transition hover:scale-105"
+                              src={thumbnailUrl || photoUrl}
+                              alt={
+                                item.class_name ||
+                                "Class photo"
+                              }
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover transition duration-200 hover:scale-105"
+                              onError={(e) => {
+                                if (
+                                  e.currentTarget.src !==
+                                  photoUrl
+                                ) {
+                                  e.currentTarget.src =
+                                    photoUrl;
+                                }
+                              }}
                             />
                           </button>
                         ) : (
@@ -522,9 +647,19 @@ export default function AdminDashboard() {
                               stroke="currentColor"
                               strokeWidth="1.7"
                             >
-                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <rect
+                                x="3"
+                                y="3"
+                                width="18"
+                                height="18"
+                                rx="2"
+                              />
 
-                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <circle
+                                cx="8.5"
+                                cy="8.5"
+                                r="1.5"
+                              />
 
                               <path
                                 strokeLinecap="round"
@@ -537,11 +672,14 @@ export default function AdminDashboard() {
 
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-900">
-                            {item.class_name || "Untitled class"}
+                            {item.class_name ||
+                              "Untitled class"}
                           </p>
 
                           <p className="mt-0.5 text-xs text-slate-400">
-                            {formatTime(item.class_time)}
+                            {formatTime(
+                              item.class_time,
+                            )}
                           </p>
                         </div>
                       </div>
@@ -549,7 +687,9 @@ export default function AdminDashboard() {
                       {/* DATE */}
 
                       <div className="text-sm text-slate-600">
-                        {formatDate(item.class_date)}
+                        {formatDate(
+                          item.class_date,
+                        )}
                       </div>
 
                       {/* CODE */}
@@ -560,29 +700,35 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
-                      {/* UPDATE CLASS */}
+                      {/* EDIT */}
 
                       <div>
                         <button
                           type="button"
                           onClick={() =>
-                            router.push(`/admin/classes/${item.id}/edit`)
+                            router.push(
+                              `/admin/classes/${item.id}/edit`,
+                            )
                           }
-                          className="flex text-sm font-medium py-2 px-4 cursor-pointer items-center justify-center rounded-lg text-[#415A77] transition border border-black/10"
+                          className="flex cursor-pointer items-center justify-center rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-[#415A77] transition"
                           title="Edit class"
                         >
                           Edit Class
                         </button>
                       </div>
 
-                      {/* ACTIONS */}
+                      {/* DELETE */}
 
-                      <div className="flex justify-end ">
+                      <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={deletingId === item.id}
-                          className="inline-flex text-sm font-medium py-2 px-4  cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          onClick={() =>
+                            setDeleteTarget(item)
+                          }
+                          disabled={
+                            deletingId === item.id
+                          }
+                          className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
                           title="Delete class"
                         >
                           {deletingId === item.id ? (
@@ -597,6 +743,7 @@ export default function AdminDashboard() {
                 })}
               </div>
             ) : (
+
               /* DESKTOP EMPTY */
 
               <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
@@ -608,9 +755,19 @@ export default function AdminDashboard() {
                     stroke="currentColor"
                     strokeWidth="1.7"
                   >
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <rect
+                      x="3"
+                      y="3"
+                      width="18"
+                      height="18"
+                      rx="2"
+                    />
 
-                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <circle
+                      cx="8.5"
+                      cy="8.5"
+                      r="1.5"
+                    />
 
                     <path
                       strokeLinecap="round"
@@ -641,7 +798,11 @@ export default function AdminDashboard() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => router.push("/admin/classes/new")}
+                    onClick={() =>
+                      router.push(
+                        "/admin/classes/new",
+                      )
+                    }
                     className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
                   >
                     Create Class
@@ -652,10 +813,11 @@ export default function AdminDashboard() {
           </div>
 
           {/* ================================================
-              MOBILE LIST
+              MOBILE
           ================================================= */}
 
           <div className="md:hidden">
+
             {loading ? (
               <div className="flex min-h-[280px] items-center justify-center">
                 <div className="flex items-center gap-3 text-sm text-slate-500">
@@ -665,29 +827,49 @@ export default function AdminDashboard() {
               </div>
             ) : classes.length > 0 ? (
               <div className="divide-y divide-slate-100">
+
                 {classes.map((item) => {
-                  const photoUrl = getPhotoUrl(item.photo_path);
+                  const photoUrl =
+                    getPhotoUrl(item.photo_path);
+
+                  const thumbnailUrl =
+                    getThumbnailUrl(item.photo_path);
 
                   return (
-                    <div key={item.id} className="p-4">
+                    <div
+                      key={item.id}
+                      className="p-4"
+                    >
                       <div className="flex items-start gap-3">
+
                         {/* PHOTO */}
 
                         {photoUrl ? (
                           <button
                             type="button"
                             onClick={() =>
-                              setPreviewPhoto({
-                                url: photoUrl,
-                                name: item.class_name || "Class photo",
-                              })
+                              openPhoto(item)
                             }
                             className="h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                           >
                             <img
-                              src={photoUrl}
-                              alt={item.class_name || "Class photo"}
+                              src={thumbnailUrl || photoUrl}
+                              alt={
+                                item.class_name ||
+                                "Class photo"
+                              }
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-cover"
+                              onError={(e) => {
+                                if (
+                                  e.currentTarget.src !==
+                                  photoUrl
+                                ) {
+                                  e.currentTarget.src =
+                                    photoUrl;
+                                }
+                              }}
                             />
                           </button>
                         ) : (
@@ -699,9 +881,19 @@ export default function AdminDashboard() {
                               stroke="currentColor"
                               strokeWidth="1.7"
                             >
-                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <rect
+                                x="3"
+                                y="3"
+                                width="18"
+                                height="18"
+                                rx="2"
+                              />
 
-                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <circle
+                                cx="8.5"
+                                cy="8.5"
+                                r="1.5"
+                              />
 
                               <path
                                 strokeLinecap="round"
@@ -715,14 +907,24 @@ export default function AdminDashboard() {
                         {/* DETAILS */}
 
                         <div className="min-w-0 flex-1">
+
                           <h3 className="truncate text-sm font-semibold text-slate-900">
-                            {item.class_name || "Untitled class"}
+                            {item.class_name ||
+                              "Untitled class"}
                           </h3>
 
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                            <span>{formatDate(item.class_date)}</span>
+                            <span>
+                              {formatDate(
+                                item.class_date,
+                              )}
+                            </span>
 
-                            <span>{formatTime(item.class_time)}</span>
+                            <span>
+                              {formatTime(
+                                item.class_time,
+                              )}
+                            </span>
                           </div>
 
                           <div className="mt-2">
@@ -735,9 +937,11 @@ export default function AdminDashboard() {
                             <button
                               type="button"
                               onClick={() =>
-                                router.push(`/admin/classes/${item.id}/edit`)
+                                router.push(
+                                  `/admin/classes/${item.id}/edit`,
+                                )
                               }
-                              className="flex text-sm font-medium py-2 px-4 cursor-pointer items-center justify-center rounded-lg text-[#415A77] transition border border-black/10"
+                              className="flex cursor-pointer items-center justify-center rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-[#415A77] transition"
                               title="Edit class"
                             >
                               Edit Class
@@ -749,9 +953,13 @@ export default function AdminDashboard() {
 
                         <button
                           type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={deletingId === item.id}
-                          className="inline-flex text-sm font-medium py-2 px-4  cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          onClick={() =>
+                            setDeleteTarget(item)
+                          }
+                          disabled={
+                            deletingId === item.id
+                          }
+                          className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
                           title="Delete class"
                         >
                           {deletingId === item.id ? (
@@ -766,6 +974,7 @@ export default function AdminDashboard() {
                 })}
               </div>
             ) : (
+
               /* MOBILE EMPTY */
 
               <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
@@ -777,9 +986,19 @@ export default function AdminDashboard() {
                     stroke="currentColor"
                     strokeWidth="1.7"
                   >
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <rect
+                      x="3"
+                      y="3"
+                      width="18"
+                      height="18"
+                      rx="2"
+                    />
 
-                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <circle
+                      cx="8.5"
+                      cy="8.5"
+                      r="1.5"
+                    />
 
                     <path
                       strokeLinecap="round"
@@ -810,7 +1029,11 @@ export default function AdminDashboard() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => router.push("/admin/classes/new")}
+                    onClick={() =>
+                      router.push(
+                        "/admin/classes/new",
+                      )
+                    }
                     className="mt-4 h-9 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
                   >
                     Create Class
@@ -825,90 +1048,120 @@ export default function AdminDashboard() {
             PAGINATION
         ================================================= */}
 
-        {!loading && classes.length > 0 && totalPages > 1 && (
-          <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
-            <p className="text-xs text-slate-500">
-              Showing{" "}
-              <span className="font-medium text-slate-700">
-                {(page - 1) * PAGE_SIZE + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium text-slate-700">
-                {Math.min(page * PAGE_SIZE, totalCount)}
-              </span>{" "}
-              of{" "}
-              <span className="font-medium text-slate-700">{totalCount}</span>{" "}
-              classes
-            </p>
+        {!loading &&
+          classes.length > 0 &&
+          totalPages > 1 && (
+            <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
 
-            <div className="flex items-center gap-1">
-              {/* PREVIOUS */}
+              <p className="text-xs text-slate-500">
+                Showing{" "}
+                <span className="font-medium text-slate-700">
+                  {(page - 1) * PAGE_SIZE + 1}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium text-slate-700">
+                  {Math.min(
+                    page * PAGE_SIZE,
+                    totalCount,
+                  )}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium text-slate-700">
+                  {totalCount}
+                </span>{" "}
+                classes
+              </p>
 
-              <button
-                type="button"
-                disabled={page === 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
-              >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m15 18-6-6 6-6"
-                  />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
 
-              {/* PAGE NUMBERS */}
+                {/* PREVIOUS */}
 
-              {pageNumbers.map((pageNumber) => (
                 <button
-                  key={pageNumber}
                   type="button"
-                  onClick={() => setPage(pageNumber)}
-                  className={`flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg px-2 text-sm font-medium transition ${
-                    page === pageNumber
-                      ? "bg-slate-900 text-white"
-                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
+                  disabled={page === 1}
+                  onClick={() =>
+                    setPage((current) =>
+                      Math.max(1, current - 1),
+                    )
+                  }
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
                 >
-                  {pageNumber}
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m15 18-6-6 6-6"
+                    />
+                  </svg>
                 </button>
-              ))}
 
-              {/* NEXT */}
+                {/* PAGE NUMBERS */}
 
-              <button
-                type="button"
-                disabled={page === totalPages}
-                onClick={() =>
-                  setPage((current) => Math.min(totalPages, current + 1))
-                }
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
-              >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                {pageNumbers.map(
+                  (pageNumber, index) =>
+                    pageNumber === "..." ? (
+                      <span
+                        key={`dots-${index}`}
+                        className="flex h-9 min-w-9 items-center justify-center px-1 text-sm text-slate-400"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() =>
+                          setPage(pageNumber)
+                        }
+                        className={`flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg px-2 text-sm font-medium transition ${
+                          page === pageNumber
+                            ? "bg-slate-900 text-white"
+                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ),
+                )}
+
+                {/* NEXT */}
+
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() =>
+                    setPage((current) =>
+                      Math.min(
+                        totalPages,
+                        current + 1,
+                      ),
+                    )
+                  }
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m9 18 6-6-6-6"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m9 18 6-6-6-6"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </section>
 
       {/* ================================================
@@ -928,6 +1181,7 @@ export default function AdminDashboard() {
             className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+
             {/* WARNING ICON */}
 
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
@@ -968,24 +1222,33 @@ export default function AdminDashboard() {
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Are you sure you want to delete{" "}
                 <span className="font-semibold text-slate-700">
-                  "{deleteTarget.class_name || "this class"}"
+                  "
+                  {deleteTarget.class_name ||
+                    "this class"}
+                  "
                 </span>
                 ?
               </p>
 
               <p className="mt-2 text-sm leading-6 text-red-600">
-                This action cannot be undone. The class and its uploaded photo
-                will be permanently deleted.
+                This action cannot be undone. The class
+                and its uploaded photo will be permanently
+                deleted.
               </p>
             </div>
 
             {/* BUTTONS */}
 
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
               <button
                 type="button"
-                disabled={deletingId === deleteTarget.id}
-                onClick={() => setDeleteTarget(null)}
+                disabled={
+                  deletingId === deleteTarget.id
+                }
+                onClick={() =>
+                  setDeleteTarget(null)
+                }
                 className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
               >
                 Cancel
@@ -993,7 +1256,9 @@ export default function AdminDashboard() {
 
               <button
                 type="button"
-                disabled={deletingId === deleteTarget.id}
+                disabled={
+                  deletingId === deleteTarget.id
+                }
                 onClick={handleDelete}
                 className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition hover:bg-red-700 disabled:pointer-events-none disabled:opacity-70"
               >
@@ -1035,6 +1300,7 @@ export default function AdminDashboard() {
                         d="M10 11v5M14 11v5"
                       />
                     </svg>
+
                     Delete Class
                   </>
                 )}
@@ -1051,17 +1317,24 @@ export default function AdminDashboard() {
       {previewPhoto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm"
-          onClick={() => setPreviewPhoto(null)}
+          onClick={() =>
+            setPreviewPhoto(null)
+          }
         >
           <div
             className="relative max-h-[90vh] max-w-5xl"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
           >
+
             {/* CLOSE */}
 
             <button
               type="button"
-              onClick={() => setPreviewPhoto(null)}
+              onClick={() =>
+                setPreviewPhoto(null)
+              }
               className="absolute -right-2 -top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-slate-700 shadow-lg transition hover:bg-slate-100"
               title="Close"
             >
@@ -1086,11 +1359,12 @@ export default function AdminDashboard() {
               </svg>
             </button>
 
-            {/* IMAGE */}
+            {/* ORIGINAL IMAGE */}
 
             <img
               src={previewPhoto.url}
               alt={previewPhoto.name}
+              decoding="async"
               className="max-h-[85vh] max-w-full rounded-xl object-contain shadow-2xl"
             />
 
@@ -1107,3 +1381,4 @@ export default function AdminDashboard() {
     </main>
   );
 }
+

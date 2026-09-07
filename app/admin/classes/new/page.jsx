@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -9,23 +8,19 @@ import { FaPhotoFilm } from "react-icons/fa6";
 import { BiUpload } from "react-icons/bi";
 import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
 
-function generateAccessCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 export default function NewClassPage() {
   const router = useRouter();
 
   const [className, setClassName] = useState("");
   const [classDate, setClassDate] = useState("");
   const [classTime, setClassTime] = useState("");
-  const [accessCode, setAccessCode] = useState(generateAccessCode());
   const [photo, setPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const [createdAccessCode, setCreatedAccessCode] = useState("");
 
@@ -79,9 +74,7 @@ export default function NewClassPage() {
 
       if (!response.ok) {
         throw new Error(
-          result.details ||
-            result.error ||
-            "Failed to create class",
+          result.details || result.error || "Failed to create class",
         );
       }
 
@@ -98,8 +91,19 @@ export default function NewClassPage() {
     }
   };
 
-  const regenerateCode = () => {
-    setAccessCode(generateAccessCode());
+  // Copy server-generated access code
+  const handleCopyAccessCode = async () => {
+    try {
+      await navigator.clipboard.writeText(createdAccessCode);
+
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Copy failed:", error);
+    }
   };
 
   const handlePhotoChange = (e) => {
@@ -124,7 +128,6 @@ export default function NewClassPage() {
   return (
     <main className="min-h-screen bg-[#F7F9FC] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 flex justify-center">
       <div className="mx-auto w-[95vw] lg:w-[55vw] pt-[10vh]">
-
         {/* Header */}
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
@@ -150,12 +153,9 @@ export default function NewClassPage() {
         {/* Main Card */}
         <div className="rounded-xl border border-[#E5EAF0] bg-white shadow-sm">
           <form onSubmit={handleSubmit}>
-
             <div className="grid lg:grid-cols-2">
-
               {/* Left - Class Information */}
               <div className="border-b border-[#E5EAF0] p-5 sm:p-6 lg:border-b-0 lg:border-r">
-
                 <div className="mb-6">
                   <h2 className="text-lg font-semibold text-[#0B1F3A]">
                     Class Information
@@ -167,7 +167,6 @@ export default function NewClassPage() {
                 </div>
 
                 <div className="space-y-5">
-
                   {/* Class Name */}
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-[#0B1F3A]">
@@ -186,7 +185,6 @@ export default function NewClassPage() {
 
                   {/* Date & Time */}
                   <div className="grid grid-cols-2 gap-3">
-
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-[#0B1F3A]">
                         Class Date
@@ -214,43 +212,12 @@ export default function NewClassPage() {
                         className="h-11 w-full rounded-lg border border-[#E5EAF0] px-3 text-base text-black/60 outline-none transition focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
                       />
                     </div>
-
                   </div>
-
-                  {/* Access Code */}
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#0B1F3A]">
-                      Guest Access Code
-                    </label>
-
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={accessCode}
-                        readOnly
-                        className="h-11 flex-1 rounded-lg border border-[#E5EAF0] bg-gray-50 px-3.5 font-mono text-lg tracking-[0.2em] text-black/60 outline-none"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={regenerateCode}
-                        className="h-11 cursor-pointer rounded-lg border border-[#E5EAF0] bg-white px-4 text-sm font-semibold text-[#415A77] transition hover:bg-gray-50"
-                      >
-                        Regenerate
-                      </button>
-                    </div>
-
-                    <p className="mt-2 text-sm text-gray-400">
-                      Give this code to the guests after their class.
-                    </p>
-                  </div>
-
                 </div>
               </div>
 
               {/* Right - Photo */}
               <div className="p-5 sm:p-6">
-
                 <div className="mb-6">
                   <h2 className="text-lg font-semibold text-[#0B1F3A]">
                     Group Photo
@@ -281,14 +248,9 @@ export default function NewClassPage() {
                 ) : (
                   <div className="flex h-56 items-center justify-center rounded-lg border border-dashed border-[#D8DEE8] bg-gray-50">
                     <div className="text-center text-gray-400">
-                      <FaPhotoFilm
-                        size={34}
-                        className="mx-auto mb-2"
-                      />
+                      <FaPhotoFilm size={34} className="mx-auto mb-2" />
 
-                      <p className="text-sm">
-                        No photo selected
-                      </p>
+                      <p className="text-sm">No photo selected</p>
                     </div>
                   </div>
                 )}
@@ -297,9 +259,7 @@ export default function NewClassPage() {
                 <label className="mt-3 flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#E5EAF0] bg-white text-sm font-semibold text-[#415A77] transition hover:bg-gray-50">
                   <BiUpload size={19} />
 
-                  {photo
-                    ? "Choose Another Photo"
-                    : "Choose Photo"}
+                  {photo ? "Choose Another Photo" : "Choose Photo"}
 
                   <input
                     type="file"
@@ -315,13 +275,11 @@ export default function NewClassPage() {
                     Selected: {photo.name}
                   </p>
                 )}
-
               </div>
             </div>
 
             {/* Footer */}
             <div className="flex flex-col-reverse gap-2 border-t border-[#E5EAF0] p-4 sm:flex-row sm:justify-end sm:p-5">
-
               <button
                 type="button"
                 onClick={() => router.push("/admin/dashboard")}
@@ -338,7 +296,6 @@ export default function NewClassPage() {
               >
                 {creating ? "Creating..." : "Create Class"}
               </button>
-
             </div>
           </form>
         </div>
@@ -347,11 +304,8 @@ export default function NewClassPage() {
       {/* Create Confirmation Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]">
-
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-
             <div className="flex items-start gap-4">
-
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#415A77]/10 text-[#415A77]">
                 <FiAlertCircle size={23} />
               </div>
@@ -362,16 +316,13 @@ export default function NewClassPage() {
                 </h3>
 
                 <p className="mt-2 text-sm leading-6 text-gray-500">
-                  Are you sure you want to create this class?
-                  The class information and uploaded photo will
-                  be saved.
+                  Are you sure you want to create this class? The class
+                  information and uploaded photo will be saved.
                 </p>
               </div>
-
             </div>
 
             <div className="mt-6 flex gap-3">
-
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
@@ -389,7 +340,6 @@ export default function NewClassPage() {
               >
                 {creating ? "Creating..." : "Yes, Create Class"}
               </button>
-
             </div>
           </div>
         </div>
@@ -398,9 +348,7 @@ export default function NewClassPage() {
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]">
-
           <div className="w-full max-w-md rounded-xl bg-white p-6 text-center shadow-xl">
-
             {/* Success Icon */}
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-green-600">
               <FiCheckCircle size={30} />
@@ -412,8 +360,8 @@ export default function NewClassPage() {
             </h3>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              The class and group photo have been successfully
-              added to the system.
+              The class and group photo have been successfully added to the
+              system.
             </p>
 
             {/* Access Code */}
@@ -422,9 +370,19 @@ export default function NewClassPage() {
                 Guest Access Code
               </p>
 
-              <p className="mt-1 font-mono text-xl font-bold tracking-[0.25em] text-[#415A77]">
-                {createdAccessCode}
-              </p>
+              <div className="mt-2 flex items-center justify-center gap-3">
+                <p className="font-mono text-xl font-bold tracking-[0.25em] text-[#415A77]">
+                  {createdAccessCode}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleCopyAccessCode}
+                  className="h-9 cursor-pointer rounded-lg border border-[#E5EAF0] bg-white px-3 text-sm font-semibold text-[#415A77] transition hover:bg-gray-50"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
             </div>
 
             {/* Okay */}
@@ -435,11 +393,9 @@ export default function NewClassPage() {
             >
               Okay
             </button>
-
           </div>
         </div>
       )}
     </main>
   );
 }
-
