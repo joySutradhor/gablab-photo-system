@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { BsTrash2 } from "react-icons/bs";
+import { FaFilePen, FaTrash } from "react-icons/fa6";
 
 const PAGE_SIZE = 12;
 
@@ -470,7 +472,7 @@ export default function AdminDashboard() {
               <div>Class</div>
               <div>Date</div>
               <div>Guest Code</div>
-              <div>Status</div>
+              <div>Update Class</div>
               <div className="text-right">Actions</div>
             </div>
 
@@ -558,66 +560,35 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
-                      {/* STATUS */}
+                      {/* UPDATE CLASS */}
 
                       <div>
-                        {photoUrl ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Photo ready
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                            No photo
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(`/admin/classes/${item.id}/edit`)
+                          }
+                          className="flex text-sm font-medium py-2 px-4 cursor-pointer items-center justify-center rounded-lg text-[#415A77] transition border border-black/10"
+                          title="Edit class"
+                        >
+                          Edit Class
+                        </button>
                       </div>
 
                       {/* ACTIONS */}
 
-                      <div className="flex justify-end">
+                      <div className="flex justify-end ">
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(item)}
                           disabled={deletingId === item.id}
-                          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          className="inline-flex text-sm font-medium py-2 px-4  cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
                           title="Delete class"
                         >
                           {deletingId === item.id ? (
                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
                           ) : (
-                            <svg
-                              className="h-4 w-4"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M3 6h18"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M8 6V4h8v2"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="m19 6-1 14H6L5 6"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M10 11v5M14 11v5"
-                              />
-                            </svg>
+                            <span>Delete</span>
                           )}
                         </button>
                       </div>
@@ -761,17 +732,16 @@ export default function AdminDashboard() {
                           </div>
 
                           <div className="mt-2">
-                            {photoUrl ? (
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                Photo ready
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                No photo
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(`/admin/classes/${item.id}/edit`)
+                              }
+                              className="flex text-sm font-medium py-2 px-4 cursor-pointer items-center justify-center rounded-lg text-[#415A77] transition border border-black/10"
+                              title="Edit class"
+                            >
+                              Edit Class
+                            </button>
                           </div>
                         </div>
 
@@ -781,43 +751,13 @@ export default function AdminDashboard() {
                           type="button"
                           onClick={() => setDeleteTarget(item)}
                           disabled={deletingId === item.id}
-                          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                          className="inline-flex text-sm font-medium py-2 px-4  cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
                           title="Delete class"
                         >
                           {deletingId === item.id ? (
                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
                           ) : (
-                            <svg
-                              className="h-4 w-4"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M3 6h18"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M8 6V4h8v2"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="m19 6-1 14H6L5 6"
-                              />
-
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M10 11v5M14 11v5"
-                              />
-                            </svg>
+                            <span>Delete</span>
                           )}
                         </button>
                       </div>
