@@ -250,7 +250,7 @@ export default function EditClassPage() {
                       onChange={(e) => setClassName(e.target.value)}
                       required
                       placeholder="Enter class name"
-                      className="h-10 w-full rounded-lg border border-[#E5EAF0] bg-white px-3 text-base outline-none transition placeholder:text-gray-400 focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
+                      className="h-10 w-full rounded-lg border border-[#E5EAF0] bg-white px-3 text-base outline-none transition text-black/80 focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
                     />
                   </div>
 
@@ -266,7 +266,7 @@ export default function EditClassPage() {
                         value={classDate}
                         onChange={(e) => setClassDate(e.target.value)}
                         required
-                        className="h-10 w-full rounded-lg border border-[#E5EAF0] px-2.5 text-base outline-none transition focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
+                        className="h-10 w-full rounded-lg border border-[#E5EAF0] px-2.5 text-base outline-none transition text-black/80  focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
                       />
                     </div>
 
@@ -280,7 +280,7 @@ export default function EditClassPage() {
                         value={classTime}
                         onChange={(e) => setClassTime(e.target.value)}
                         required
-                        className="h-10 w-full rounded-lg border border-[#E5EAF0] px-2.5 text-base outline-none transition focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
+                        className="h-10 w-full rounded-lg border border-[#E5EAF0] px-2.5 text-base outline-none transition text-black/80 focus:border-[#415A77] focus:ring-2 focus:ring-[#415A77]/10"
                       />
                     </div>
                   </div>
@@ -374,7 +374,7 @@ export default function EditClassPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="h-10 cursor-pointer rounded-lg border border-black/10 px-6 text-sm font-medium  transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-10 cursor-pointer rounded-lg border text-black/80 border-black/10 px-6 text-sm font-medium  transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? "Updating..." : "Update Class"}
               </button>
