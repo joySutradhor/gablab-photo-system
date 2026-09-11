@@ -1,12 +1,14 @@
-
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 const PAGE_SIZE = 12;
 const SEARCH_DEBOUNCE = 400;
+
+const MAIN_ADMIN_EMAIL = "ryan@gablabbcn.com";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -28,6 +30,13 @@ export default function AdminDashboard() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+
+  // --------------------------------------------------
+  // MAIN ADMIN CHECK
+  // --------------------------------------------------
+
+  const isMainAdmin =
+    user?.email?.toLowerCase() === MAIN_ADMIN_EMAIL.toLowerCase();
 
   // --------------------------------------------------
   // AUTH CHECK
@@ -270,8 +279,9 @@ export default function AdminDashboard() {
     return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/class-photos/${photoPath}?width=180&height=180&resize=cover&quality=70`;
   }
 
-  
-
+  // --------------------------------------------------
+  // FORMAT DATE
+  // --------------------------------------------------
 
   function formatDate(date) {
     if (!date) return "-";
@@ -355,9 +365,7 @@ export default function AdminDashboard() {
   return (
     <main className="min-h-screen bg-slate-50">
 
-      {/* ================================================
-          HEADER
-      ================================================= */}
+      {/* HEADER */}
 
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6 lg:px-8">
@@ -436,9 +444,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* ================================================
-          CONTENT
-      ================================================= */}
+      {/* CONTENT */}
 
       <section className="mx-auto max-w-7xl px-5 py-6 sm:px-6 lg:px-8">
 
@@ -494,9 +500,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================================================
-            TOOLBAR
-        ================================================= */}
+        {/* TOOLBAR */}
 
         <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -563,9 +567,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ================================================
-            TABLE / LIST
-        ================================================= */}
+        {/* TABLE / LIST */}
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
@@ -573,14 +575,25 @@ export default function AdminDashboard() {
 
           <div className="hidden md:block">
 
-            <div className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {/* TABLE HEADER */}
+
+            <div
+              className={`grid ${
+                isMainAdmin
+                  ? "grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px]"
+                  : "grid-cols-[minmax(260px,1fr)_150px_150px_120px]"
+              } border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500`}
+            >
               <div>Class</div>
               <div>Date</div>
               <div>Guest Code</div>
               <div>Update Class</div>
-              <div className="text-right">
-                Actions
-              </div>
+
+              {isMainAdmin && (
+                <div className="text-right">
+                  Actions
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -603,7 +616,11 @@ export default function AdminDashboard() {
                   return (
                     <div
                       key={item.id}
-                      className="grid grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px] items-center px-5 py-4 transition hover:bg-slate-50/70"
+                      className={`grid ${
+                        isMainAdmin
+                          ? "grid-cols-[minmax(260px,1fr)_150px_150px_120px_100px]"
+                          : "grid-cols-[minmax(260px,1fr)_150px_150px_120px]"
+                      } items-center px-5 py-4 transition hover:bg-slate-50/70`}
                     >
 
                       {/* CLASS */}
@@ -619,7 +636,9 @@ export default function AdminDashboard() {
                             className="h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                           >
                             <img
-                              src={thumbnailUrl || photoUrl}
+                              src={
+                                thumbnailUrl || photoUrl
+                              }
                               alt={
                                 item.class_name ||
                                 "Class photo"
@@ -717,27 +736,29 @@ export default function AdminDashboard() {
                         </button>
                       </div>
 
-                      {/* DELETE */}
+                      {/* ACTIONS */}
 
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget(item)
-                          }
-                          disabled={
-                            deletingId === item.id
-                          }
-                          className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
-                          title="Delete class"
-                        >
-                          {deletingId === item.id ? (
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
-                          ) : (
-                            <span>Delete</span>
-                          )}
-                        </button>
-                      </div>
+                      {isMainAdmin && (
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget(item)
+                            }
+                            disabled={
+                              deletingId === item.id
+                            }
+                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                            title="Delete class"
+                          >
+                            {deletingId === item.id ? (
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                            ) : (
+                              <span>Delete</span>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -812,9 +833,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* ================================================
-              MOBILE
-          ================================================= */}
+          {/* MOBILE */}
 
           <div className="md:hidden">
 
@@ -853,7 +872,9 @@ export default function AdminDashboard() {
                             className="h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
                           >
                             <img
-                              src={thumbnailUrl || photoUrl}
+                              src={
+                                thumbnailUrl || photoUrl
+                              }
                               alt={
                                 item.class_name ||
                                 "Class photo"
@@ -949,25 +970,27 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* DELETE */}
+                        {/* ACTIONS / DELETE */}
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget(item)
-                          }
-                          disabled={
-                            deletingId === item.id
-                          }
-                          className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
-                          title="Delete class"
-                        >
-                          {deletingId === item.id ? (
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
-                          ) : (
-                            <span>Delete</span>
-                          )}
-                        </button>
+                        {isMainAdmin && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeleteTarget(item)
+                            }
+                            disabled={
+                              deletingId === item.id
+                            }
+                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
+                            title="Delete class"
+                          >
+                            {deletingId === item.id ? (
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+                            ) : (
+                              <span>Delete</span>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1044,9 +1067,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ================================================
-            PAGINATION
-        ================================================= */}
+        {/* PAGINATION */}
 
         {!loading &&
           classes.length > 0 &&
@@ -1164,9 +1185,7 @@ export default function AdminDashboard() {
           )}
       </section>
 
-      {/* ================================================
-          DELETE CONFIRMATION MODAL
-      ================================================= */}
+      {/* DELETE CONFIRMATION MODAL */}
 
       {deleteTarget && (
         <div
@@ -1222,10 +1241,8 @@ export default function AdminDashboard() {
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Are you sure you want to delete{" "}
                 <span className="font-semibold text-slate-700">
-                  "
-                  {deleteTarget.class_name ||
-                    "this class"}
-                  "
+                  "{deleteTarget.class_name ||
+                    "this class"}"
                 </span>
                 ?
               </p>
@@ -1310,9 +1327,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ================================================
-          PHOTO PREVIEW MODAL
-      ================================================= */}
+      {/* PHOTO PREVIEW MODAL */}
 
       {previewPhoto && (
         <div
@@ -1381,4 +1396,3 @@ export default function AdminDashboard() {
     </main>
   );
 }
-
