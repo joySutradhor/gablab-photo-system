@@ -17,9 +17,9 @@ import {
 const SITE_URL = "https://www.gastronomicartsbarcelona.com/";
 
 const REFERRAL_LINK =
-  "https://widgets.bokun.io/online-sales/ea8ee2e2-2c4f-46e7-b6f8-7dc5ed908938/experience/720922";
+  "https://www.gastronomicartsbarcelona.com/paellaclass";
 
-const REFERRAL_CODE = "SEPTEMBER10";
+const REFERRAL_CODE = "ARRZ10";
 
 const SOCIAL_LINKS = {
   instagram: "https://www.instagram.com/gablabbcn/",
@@ -524,7 +524,7 @@ export default function GuestPhotosPage() {
                         Coupon Code
                       </p>
 
-                      <p className="mt-2 break-words font-mono text-sm font-bold tracking-wider text-[#806b35]">
+                      <p className="mt-2 break-words font-mono text-sm font-bold tracking-wider text-yellow-500">
                         {REFERRAL_CODE}
                       </p>
                     </div>
@@ -536,7 +536,7 @@ export default function GuestPhotosPage() {
                       </p>
 
                       <p className="mt-2 text-sm font-semibold text-[#182433]">
-                        September 30
+                        December 31
                       </p>
                     </div>
                   </div>
